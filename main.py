@@ -6,6 +6,9 @@ import numpy as np  # linear algebra
 # from ProtoNetDrift import PrototypicalNet, train_step, test_step, load_weights
 import torch.optim as optim
 from preprocessing import LoadDriftData
+import torch.utils.data.dataset as Dataset
+# 引入DataLoader：
+import torch.utils.data.dataloader as DataLoader
 
 def main():
 
