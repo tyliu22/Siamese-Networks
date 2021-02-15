@@ -73,8 +73,8 @@ class SiameseNetwork(nn.Module):
             nn.Linear(256, 256),
             nn.ReLU(inplace=True),
 
-            # nn.Linear(256, 256),
-            # nn.ReLU(inplace=True),
+            nn.Linear(256, 256),
+            nn.ReLU(inplace=True),
 
             nn.Linear(256, 128),
             nn.ReLU(inplace=True),
@@ -201,13 +201,13 @@ def main():
 
     # Train the model
     model = train()
-    torch.save(model.state_dict(), "/content/model.pt")
+    torch.save(model.state_dict(), "/home/tianyliu/Data/Siamese-Networks/content/model.pt")
     print("Model Saved Successfully")
 
     # Load the saved model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = SiameseNetwork().to(device)
-    model.load_state_dict(torch.load("/content/model.pt"))
+    model.load_state_dict(torch.load("/home/tianyliu/Data/Siamese-Networks/content/model.pt"))
 
 
     # Load the test dataset
@@ -230,7 +230,7 @@ def main():
     #     if counter == 20:
     #         break
 
-    test_dataloader = DataLoader(test_dataset, num_workers=6, batch_size=1, shuffle=True)
+    # test_dataloader = DataLoader(test_dataset, num_workers=6, batch_size=1, shuffle=True)
     accuracy = 0
     counter = 0
     correct = 0
