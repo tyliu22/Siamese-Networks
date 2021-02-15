@@ -1,19 +1,25 @@
 # Check out the code in work at https://www.kaggle.com/hsankesara/prototypical-net/
 # Check out the blog at <COMING SOON>
 
-import torch
+
 import numpy as np  # linear algebra
 # from ProtoNetDrift import PrototypicalNet, train_step, test_step, load_weights
 import torch.optim as optim
 from preprocessing import LoadDriftData
+
+import torch
+from torch.autograd import Variable
+import PIL.ImageOps
+import torch.nn as nn
+from torch import optim
+import torch.nn.functional as F
 import torch.utils.data.dataset as Dataset
-# 引入DataLoader：
 import torch.utils.data.dataloader as DataLoader
 
 
 
 
-    # 创建子类
+# 创建子类
 class subDataset(Dataset.Dataset):
     # 初始化，定义数据内容和标签
     def __init__(self, Data, Label):
@@ -29,6 +35,86 @@ class subDataset(Dataset.Dataset):
         data = torch.Tensor(self.Data[index])
         label = torch.IntTensor(self.Label[index])
         return data, label
+
+
+class SiameseNetwork(nn.Module):
+    def __init__(self):
+        super(SiameseNetwork, self).__init__()
+
+        # Setting up the Sequential of CNN Layers
+        self.cnn1 = nn.Sequential(
+
+            nn.Conv2d(1, 96, kernel_size=11, stride=1),
+            nn.ReLU(inplace=True),
+            nn.LocalResponseNorm(5, alpha=0.0001, beta=0.75, k=2),
+            nn.MaxPool2d(3, stride=2),
+
+            nn.Conv2d(96, 256, kernel_size=5, stride=1, padding=2),
+            nn.ReLU(inplace=True),
+            nn.LocalResponseNorm(5, alpha=0.0001, beta=0.75, k=2),
+            nn.MaxPool2d(3, stride=2),
+            nn.Dropout2d(p=0.3),
+
+            nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(384, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(3, stride=2),
+            nn.Dropout2d(p=0.3),
+
+        )
+
+        # Defining the fully connected layers
+        self.fc1 = nn.Sequential(
+            nn.Linear(100, 256),
+            nn.ReLU(inplace=True),
+            nn.Dropout2d(p=0.1),
+
+            nn.Linear(256, 256),
+            nn.ReLU(inplace=True),
+
+            # nn.Linear(256, 256),
+            # nn.ReLU(inplace=True),
+
+            nn.Linear(256, 128),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(128, 2))
+
+    def forward_once(self, x):
+        # Forward pass
+        # output = self.cnn1(x)
+        # output = output.view(output.size()[0], -1)
+        output = self.fc1(x)
+        return output
+
+    def forward(self, input1, input2):
+        # forward pass of input 1
+        output1 = self.forward_once(input1)
+        # forward pass of input 2
+        output2 = self.forward_once(input2)
+        return output1, output2
+
+
+class ContrastiveLoss(torch.nn.Module):
+    """
+    Contrastive loss function.
+    Based on: http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
+    """
+
+    def __init__(self, margin=2.0):
+        super(ContrastiveLoss, self).__init__()
+        self.margin = margin
+
+    def forward(self, output1, output2, label):
+        euclidean_distance = F.pairwise_distance(output1, output2)
+        loss_contrastive = torch.mean((1-label) * torch.pow(euclidean_distance, 2) +
+                                      (label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
+
+
+        return loss_contrastive
+
+
 
 
 def main():
@@ -61,9 +147,6 @@ def main():
     Drift_test_x, Drift_test_y = Drift_test_x.numpy(), Drift_test_y.numpy()
 
 
-
-    # Drift_train_x, Drift_train_y = Drift_train_x.numpy(), Drift_train_y.numpy()
-    # Drift_test_x, Drift_test_y = Drift_test_x.numpy(), Drift_test_y.numpy()
     train_dataset = subDataset(Drift_train_x, Drift_train_y)
     test_dataset = subDataset(Drift_test_x, Drift_test_y)
 
@@ -73,17 +156,105 @@ def main():
     train_dataloader = DataLoader.DataLoader(train_dataset, batch_size=20, shuffle=False, num_workers=4)
     test_dataloader = DataLoader.DataLoader(test_dataset, batch_size=20, shuffle=False, num_workers=4)
     # 使用enumerate访问可遍历的数组对象：
-    for i, item in enumerate(train_dataloader):
-        print('i:', i)
-        data, label = item
-        print('data:', data)
-        print('label:', label)
+    # for i, item in enumerate(train_dataloader):
+    #     print('i:', i)
+    #     data, label = item
+    #     print('data:', data)
+    #     print('label:', label)
 
+    # Check whether you have GPU is loaded or not
+    if torch.cuda.is_available():
+        print('Yes')
 
+    # Declare Siamese Network
+    net = SiameseNetwork().cuda()
+    # Decalre Loss Function
+    criterion = ContrastiveLoss()
+    # Declare Optimizer
+    optimizer = optim.RMSprop(net.parameters(), lr=1e-3, alpha=0.99, eps=1e-8, weight_decay=0.0005, momentum=0.9)
 
+    def train():
+        counter = []
+        loss_history = []
+        iteration_number = 0
 
+        for epoch in range(0, 20):
+            for i, data in enumerate(train_dataloader, 0):
+                data, label = data
+                data0 = data[:, 0:99]
+                data1 = data[:,100:199]
+                data0, data1, label = data0.cuda(), data1.cuda(), label.cuda()
+                optimizer.zero_grad()
+                output1, output2 = net(data0, data1)
+                loss_contrastive = criterion(output1, output2, label)
+                loss_contrastive.backward()
+                optimizer.step()
+                if i % 50 == 0:
+                    print("Epoch number {}\n Current loss {}\n".format(epoch, loss_contrastive.item()))
+                    iteration_number += 10
+                    counter.append(iteration_number)
+                    loss_history.append(loss_contrastive.item())
+        return net
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # Train the model
+    model = train()
+    torch.save(model.state_dict(), "/content/model.pt")
+    print("Model Saved Successfully")
 
+    # Load the saved model
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = SiameseNetwork().to(device)
+    model.load_state_dict(torch.load("/content/model20.pt"))
+
+    # Load the test dataset
+    test_dataset = SiameseNetworkDataset(training_csv=testing_csv, training_dir=testing_dir,
+                                         transform=transforms.Compose([transforms.Resize((105, 105)),
+                                                                       transforms.ToTensor()
+                                                                       ])
+                                         )
+
+    test_dataloader = DataLoader(test_dataset, num_workers=6, batch_size=1, shuffle=True)
+
+    # Print the sample outputs to view its dissimilarity
+    counter = 0
+    list_0 = torch.FloatTensor([[0]])
+    list_1 = torch.FloatTensor([[1]])
+    for i, data in enumerate(test_dataloader, 0):
+        x0, x1, label = data
+        concatenated = torch.cat((x0, x1), 0)
+        output1, output2 = model(x0.to(device), x1.to(device))
+        eucledian_distance = F.pairwise_distance(output1, output2)
+        if label == list_0:
+            label = "Orginial"
+        else:
+            label = "Forged"
+        imshow(torchvision.utils.make_grid(concatenated),
+               'Dissimilarity: {:.2f} Label: {}'.format(eucledian_distance.item(), label))
+        counter = counter + 1
+        if counter == 20:
+            break
+
+    test_dataloader = DataLoader(test_dataset, num_workers=6, batch_size=1, shuffle=True)
+    accuracy = 0
+    counter = 0
+    correct = 0
+    for i, data in enumerate(test_dataloader, 0):
+        x0, x1, label = data
+        # onehsot applies in the output of 128 dense vectors which is then converted to 2 dense vectors
+        output1, output2 = model(x0.to(device), x1.to(device))
+        res = torch.abs(output1.cuda() - output2.cuda())
+        label = label[0].tolist()
+        label = int(label[0])
+        result = torch.max(res, 1)[1][0][0][0].data[0].tolist()
+        if label == result:
+            correct = correct + 1
+        counter = counter + 1
+    #   if counter ==20:
+    #      break
+
+    accuracy = (correct / len(test_dataloader)) * 100
+    print("Accuracy:{}%".format(accuracy))
 
     print('Checking if GPU is available')
     use_gpu = torch.cuda.is_available()

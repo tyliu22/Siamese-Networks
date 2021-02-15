@@ -4,7 +4,7 @@ def preprocessingDriftData():
     file_path = "dataset/stream_drift.csv"
     drift_data_frame = pd.read_csv(file_path, sep=',', header=0).iloc[:,1:]
     drift_data_frame['label'] = 1
-    print(drift_data_frame)
+    # print(drift_data_frame)
     return drift_data_frame
 
 
@@ -13,7 +13,7 @@ def preprocessingNormalData():
     normal_data_frame = pd.read_csv(file_path, sep=',', header=0).iloc[:,1:]
     normal_data_frame['label'] = 0
 
-    print(normal_data_frame)
+    # print(normal_data_frame)
     return normal_data_frame
 
 
