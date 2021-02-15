@@ -179,10 +179,11 @@ def main():
         iteration_number = 0
 
         for epoch in range(0, 20):
-            for i, data in enumerate(train_dataloader, 0):
-                data, label = data
-                data0 = data[:, 0:99]
-                data1 = data[:,100:199]
+            for i, item in enumerate(train_dataloader, 0):
+                data, label = item
+                # data0, data1 = data.split(100, 100)
+                data0 = data[:, 0:100]
+                data1 = data[:,100:200]
                 data0, data1, label = data0.cuda(), data1.cuda(), label.cuda()
                 optimizer.zero_grad()
                 output1, output2 = net(data0, data1)
@@ -207,30 +208,23 @@ def main():
     model = SiameseNetwork().to(device)
     model.load_state_dict(torch.load("/content/model20.pt"))
 
+
     # Load the test dataset
-    test_dataset = SiameseNetworkDataset(training_csv=testing_csv, training_dir=testing_dir,
-                                         transform=transforms.Compose([transforms.Resize((105, 105)),
-                                                                       transforms.ToTensor()
-                                                                       ])
-                                         )
-
-    test_dataloader = DataLoader(test_dataset, num_workers=6, batch_size=1, shuffle=True)
-
     # Print the sample outputs to view its dissimilarity
     counter = 0
     list_0 = torch.FloatTensor([[0]])
     list_1 = torch.FloatTensor([[1]])
-    for i, data in enumerate(test_dataloader, 0):
-        x0, x1, label = data
-        concatenated = torch.cat((x0, x1), 0)
-        output1, output2 = model(x0.to(device), x1.to(device))
+    for i, item in enumerate(test_dataloader, 0):
+        data, label = item
+        data0 = data[:, 0:100]
+        data1 = data[:, 100:200]
+        concatenated = torch.cat((data0, data1), 0)
+        output1, output2 = model(data0.to(device), data1.to(device))
         eucledian_distance = F.pairwise_distance(output1, output2)
-        if label == list_0:
-            label = "Orginial"
-        else:
-            label = "Forged"
-        imshow(torchvision.utils.make_grid(concatenated),
-               'Dissimilarity: {:.2f} Label: {}'.format(eucledian_distance.item(), label))
+        # if label == list_0:
+        #     label = "Orginial"
+        # else:
+        #     label = "Forged"
         counter = counter + 1
         if counter == 20:
             break
@@ -256,30 +250,10 @@ def main():
     accuracy = (correct / len(test_dataloader)) * 100
     print("Accuracy:{}%".format(accuracy))
 
-    print('Checking if GPU is available')
-    use_gpu = torch.cuda.is_available()
-    # use_gpu = False
 
-    # Converting input to pytorch Tensor
-    # trainx = torch.from_numpy(trainx).float()
-    # testx = torch.from_numpy(testx).float()
-    if use_gpu:
-        Drift_train_x = Drift_train_x.cuda()
-        Drift_test_x = Drift_test_x.cuda()
-    # Priniting the data
-    print(Drift_train_x.size(), Drift_test_x.size())
-    # Set training iterations and display period
-    num_episode = 40000
-    frame_size = 100
-    # trainx = trainx.permute(0, 3, 1, 2)
-    # testx = testx.permute(0, 3, 1, 2)
 
-    # Initializing prototypical net
-    print('Initializing prototypical net')
 
-    protonet = PrototypicalNet(use_gpu=use_gpu, Data_Vector_Length =Data_Vector_Length, ModelSelect=ModelSelect)
-    # optimizer = optim.SGD(protonet.parameters(), lr=0.03, momentum=0.99)
-    optimizer = optim.Adam(protonet.parameters(), lr=0.03)
+
 
 
 
