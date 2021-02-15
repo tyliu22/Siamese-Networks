@@ -153,7 +153,7 @@ def main():
 
     # 创建DataLoader迭代器
     # 创建DataLoader，batch_size设置为2，shuffle=False不打乱数据顺序，num_workers= 4使用4个子进程：
-    train_dataloader = DataLoader.DataLoader(train_dataset, batch_size=20, shuffle=False, num_workers=4)
+    train_dataloader = DataLoader.DataLoader(train_dataset, batch_size=40, shuffle=False, num_workers=4)
     test_dataloader = DataLoader.DataLoader(test_dataset, batch_size=20, shuffle=False, num_workers=4)
     # 使用enumerate访问可遍历的数组对象：
     # for i, item in enumerate(train_dataloader):
@@ -166,8 +166,9 @@ def main():
     if torch.cuda.is_available():
         print('Yes')
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # Declare Siamese Network
-    net = SiameseNetwork().cuda()
+    net = SiameseNetwork().to(device)
     # Decalre Loss Function
     criterion = ContrastiveLoss()
     # Declare Optimizer
@@ -178,7 +179,7 @@ def main():
         loss_history = []
         iteration_number = 0
 
-        for epoch in range(0, 20):
+        for epoch in range(0, 50):
             for i, item in enumerate(train_dataloader, 0):
                 data, label = item
                 # data0, data1 = data.split(100, 100)
@@ -197,7 +198,7 @@ def main():
                     loss_history.append(loss_contrastive.item())
         return net
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     # Train the model
     model = train()
     torch.save(model.state_dict(), "/content/model.pt")
@@ -206,44 +207,46 @@ def main():
     # Load the saved model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = SiameseNetwork().to(device)
-    model.load_state_dict(torch.load("/content/model20.pt"))
+    model.load_state_dict(torch.load("/content/model.pt"))
 
 
     # Load the test dataset
     # Print the sample outputs to view its dissimilarity
-    counter = 0
-    list_0 = torch.FloatTensor([[0]])
-    list_1 = torch.FloatTensor([[1]])
-    for i, item in enumerate(test_dataloader, 0):
-        data, label = item
-        data0 = data[:, 0:100]
-        data1 = data[:, 100:200]
-        concatenated = torch.cat((data0, data1), 0)
-        output1, output2 = model(data0.to(device), data1.to(device))
-        eucledian_distance = F.pairwise_distance(output1, output2)
-        # if label == list_0:
-        #     label = "Orginial"
-        # else:
-        #     label = "Forged"
-        counter = counter + 1
-        if counter == 20:
-            break
+    # counter = 0
+    # list_0 = torch.FloatTensor([[0]])
+    # list_1 = torch.FloatTensor([[1]])
+    # for i, item in enumerate(test_dataloader, 0):
+    #     data, label = item
+    #     data0 = data[:, 0:100]
+    #     data1 = data[:, 100:200]
+    #     concatenated = torch.cat((data0, data1), 0)
+    #     output1, output2 = model(data0.to(device), data1.to(device))
+    #     eucledian_distance = F.pairwise_distance(output1, output2)
+    #     # if label == list_0:
+    #     #     label = "Orginial"
+    #     # else:
+    #     #     label = "Forged"
+    #     counter = counter + 1
+    #     if counter == 20:
+    #         break
 
     test_dataloader = DataLoader(test_dataset, num_workers=6, batch_size=1, shuffle=True)
     accuracy = 0
     counter = 0
     correct = 0
-    for i, data in enumerate(test_dataloader, 0):
-        x0, x1, label = data
+    for i, item in enumerate(test_dataloader, 0):
+        data, label = item
+        data0 = data[:, 0:100]
+        data1 = data[:, 100:200]
         # onehsot applies in the output of 128 dense vectors which is then converted to 2 dense vectors
-        output1, output2 = model(x0.to(device), x1.to(device))
+        output1, output2 = model(data0.to(device), data1.to(device))
         res = torch.abs(output1.cuda() - output2.cuda())
         label = label[0].tolist()
         label = int(label[0])
         result = torch.max(res, 1)[1][0][0][0].data[0].tolist()
         if label == result:
             correct = correct + 1
-        counter = counter + 1
+        # counter = counter + 1
     #   if counter ==20:
     #      break
 
