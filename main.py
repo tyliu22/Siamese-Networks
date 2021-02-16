@@ -154,13 +154,7 @@ def main():
     # 创建DataLoader迭代器
     # 创建DataLoader，batch_size设置为2，shuffle=False不打乱数据顺序，num_workers= 4使用4个子进程：
     train_dataloader = DataLoader.DataLoader(train_dataset, batch_size=40, shuffle=False, num_workers=4)
-    test_dataloader = DataLoader.DataLoader(test_dataset, batch_size=20, shuffle=False, num_workers=4)
-    # 使用enumerate访问可遍历的数组对象：
-    # for i, item in enumerate(train_dataloader):
-    #     print('i:', i)
-    #     data, label = item
-    #     print('data:', data)
-    #     print('label:', label)
+    test_dataloader = DataLoader.DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)
 
     # Check whether you have GPU is loaded or not
     if torch.cuda.is_available():
@@ -179,7 +173,7 @@ def main():
         loss_history = []
         iteration_number = 0
 
-        for epoch in range(0, 50):
+        for epoch in range(0, 10):
             for i, item in enumerate(train_dataloader, 0):
                 data, label = item
                 # data0, data1 = data.split(100, 100)
@@ -200,9 +194,9 @@ def main():
 
 
     # Train the model
-    model = train()
-    torch.save(model.state_dict(), "/home/tianyliu/Data/Siamese-Networks/content/model.pt")
-    print("Model Saved Successfully")
+    # model = train()
+    # torch.save(model.state_dict(), "/home/tianyliu/Data/Siamese-Networks/content/model.pt")
+    # print("Model Saved Successfully")
 
     # Load the saved model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -210,27 +204,7 @@ def main():
     model.load_state_dict(torch.load("/home/tianyliu/Data/Siamese-Networks/content/model.pt"))
 
 
-    # Load the test dataset
-    # Print the sample outputs to view its dissimilarity
-    # counter = 0
-    # list_0 = torch.FloatTensor([[0]])
-    # list_1 = torch.FloatTensor([[1]])
-    # for i, item in enumerate(test_dataloader, 0):
-    #     data, label = item
-    #     data0 = data[:, 0:100]
-    #     data1 = data[:, 100:200]
-    #     concatenated = torch.cat((data0, data1), 0)
-    #     output1, output2 = model(data0.to(device), data1.to(device))
-    #     eucledian_distance = F.pairwise_distance(output1, output2)
-    #     # if label == list_0:
-    #     #     label = "Orginial"
-    #     # else:
-    #     #     label = "Forged"
-    #     counter = counter + 1
-    #     if counter == 20:
-    #         break
-
-    # test_dataloader = DataLoader(test_dataset, num_workers=6, batch_size=1, shuffle=True)
+    # Accuracy check
     accuracy = 0
     counter = 0
     correct = 0
@@ -240,58 +214,41 @@ def main():
         data1 = data[:, 100:200]
         # onehsot applies in the output of 128 dense vectors which is then converted to 2 dense vectors
         output1, output2 = model(data0.to(device), data1.to(device))
+        eucledian_distance = F.pairwise_distance(output1, output2)
         res = torch.abs(output1.cuda() - output2.cuda())
-        label = label[0].tolist()
-        label = int(label[0])
-        result = torch.max(res, 1)[1][0][0][0].data[0].tolist()
+        label = label.tolist()
+        label = int(label)
+        # torch.where(eucledian_distance > 1, eucledian_distance, 1.0.float())
+        result = 0
+        if eucledian_distance >1:
+            result = 1
+        # result = torch.max(res, 1)[1][0][0][0].data[0].tolist()
         if label == result:
             correct = correct + 1
-        # counter = counter + 1
-    #   if counter ==20:
-    #      break
+
+
 
     accuracy = (correct / len(test_dataloader)) * 100
     print("Accuracy:{}%".format(accuracy))
 
-
-
-
-
-
-
-
-    # Training loop
-    frame_loss = 0
-    frame_acc = 0
-    for i in range(num_episode):
-        # print(i)
-        loss, acc, model_embeding = train_step(protonet, Drift_train_x, Drift_train_y, 5, 4, 5, optimizer)
-        # print(acc)
-        frame_loss += loss.data
-        frame_acc += acc.data
-        if((i+1) % frame_size == 0):
-            print("Frame Number:", ((i+1) // frame_size), 'Frame Loss: ', frame_loss.data.cpu().numpy().tolist() /
-                  frame_size, 'Frame Accuracy:', (frame_acc.data.cpu().numpy().tolist() * 100) / frame_size)
-            frame_loss = 0
-            frame_acc = 0
-    PATH = '/home/tianyliu/Data/ConceptDrift/input/Model/'+ModelSelect+'/'+DATA_FILE+'/model_embeding.pkl'
-    torch.save(model_embeding.state_dict(), PATH)
-
-    # Test loop
-    num_test_episode = 5000
-    avg_loss = 0
-    avg_acc = 0
-    for _ in range(num_test_episode):
-        loss, acc = test_step(protonet, Drift_test_x, Drift_test_y, 5, 4, 15)
-        avg_loss += loss.data
-        avg_acc += acc.data
-        # print(acc)
-    print('Avg Loss: ', avg_loss.data.cpu().numpy().tolist() / num_test_episode,
-          'Avg Accuracy:', (avg_acc.data.cpu().numpy().tolist() * 100) / num_test_episode)
-
-    # Using Pretrained Model
-    # protonet = load_weights('./protonet.pt', protonet, use_gpu)
-
+    # # Print the sample outputs to view its dissimilarity
+    # counter = 0
+    # list_0 = torch.FloatTensor([[0]])
+    # list_1 = torch.FloatTensor([[1]])
+    # for i, data in enumerate(test_dataloader, 0):
+    #     x0, x1, label = data
+    #     concatenated = torch.cat((x0, x1), 0)
+    #     output1, output2 = model(x0.to(device), x1.to(device))
+    #     eucledian_distance = F.pairwise_distance(output1, output2)
+    #     if label == list_0:
+    #         label = "Orginial"
+    #     else:
+    #         label = "Forged"
+    #     imshow(torchvision.utils.make_grid(concatenated),
+    #            'Dissimilarity: {:.2f} Label: {}'.format(eucledian_distance.item(), label))
+    #     counter = counter + 1
+    #     if counter == 20:
+    #         break
 
 if __name__ == "__main__":
     main()
